@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Reverse Image Search</title>
+    <style>
+        :root {
+            --bg-color: white;
+            --panel-bg: white;
+            --border-color: black;
+            --text-color: black;
+            --accent: #3b82f6;
+            --accent-hover: #60a5fa;
+            --true-color: green;
+            --false-color: red;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #sidebar {
+            width: 380px;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.05);
+            z-index: 10;
+            overflow-y: auto;
+        }
+
+        #sidebar h1, #right-sidebar h2 {
+            font-size: 1.2rem;
+            margin: 0 0 20px 0;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        #right-sidebar {
+            width: 320px;
+            background: var(--panel-bg);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-shadow: -4px 0 24px rgba(0, 0, 0, 0.05);
+            z-index: 10;
+            overflow-y: auto;
+        }
+
+        .match-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s;
+            margin-bottom: 8px;
+            background: rgba(0, 0, 0, 0.02);
+            color: var(--text-color);
+        }
+        .match-item:hover {
+            background: rgba(0, 0, 0, 0.06);
+            border-color: var(--border-color);
+        }
+        .match-item.selected {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: var(--accent);
+        }
+        .match-item img {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 4px;
+            background: #eee;
+            border: 1px solid var(--border-color);
+        }
+
+        .control-panel {
+            background: rgba(0, 0, 0, 0.02);
+            border: 1px solid var(--border-color);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .control-panel label {
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-color);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            margin-top: 5px;
+        }
+
+        button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: var(--accent-hover); }
+
+        #workspace {
+            flex-grow: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #toolbar {
+            height: 60px;
+            background: var(--panel-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            gap: 20px;
+            color: var(--text-color);
+        }
+
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: space-evenly;
+            padding: 40px;
+        }
+
+        .image-wrapper {
+            position: relative;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            border: 2px solid var(--border-color);
+            border-radius: 4px;
+            overflow: visible;
+        }
+
+        .image-wrapper img, .image-wrapper canvas {
+            display: block;
+            max-width: 35vw;
+            max-height: 60vh;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
+
+        #matchCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: auto;
+            z-index: 5;
+        }
+
+        .image-title {
+            position: absolute;
+            top: -30px;
+            left: 0;
+            font-size: 0.9rem;
+            color: var(--text-color);
+            font-weight: 500;
+        }
+
+        #details-panel {
+            height: 200px;
+            background: var(--panel-bg);
+            border-top: 1px solid var(--border-color);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-color);
+            box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.05);
+            z-index: 10;
+        }
+        
+        #hiddenCanvas {
+            display: none;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .true_match { background: rgba(0, 128, 0, 0.1); color: var(--true-color); border: 1px solid var(--true-color); }
+        .false_match { background: rgba(255, 0, 0, 0.1); color: var(--false-color); border: 1px solid var(--false-color); }
+    
+        .layers-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; margin-top: 10px; }
+        .layer-item { background: rgba(0, 0, 0, 0.03); padding: 8px; border-radius: 4px; display: flex; align-items: center; gap: 8px; cursor: move; border: 1px solid var(--border-color); color: var(--text-color); }
+        .layer-item.active { background: rgba(59, 130, 246, 0.15); border-color: var(--accent); }
+        .layer-item img { width: 30px; height: 30px; object-fit: contain; background: #eee; border-radius: 2px; }
+        .tool-btn { background: transparent; border: 1px solid var(--border-color); color: var(--text-color); padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s; }
+        .tool-btn:hover { background: rgba(0, 0, 0, 0.05); }
+        .tool-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h1>Transform & Search</h1>
+        <div class="control-panel" id="dropZone" style="border: 2px dashed var(--border-color); padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s;">
+            <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 10px;">Drag & Drop an image here</div>
+            <input type="file" id="fileUpload" accept="image/*" style="display: none;">
+            <button onclick="document.getElementById('fileUpload').click()" style="padding: 8px 16px; font-size: 0.8rem; margin-bottom: 10px;">Or Browse Files</button>
+            <select id="testImageSelect" style="width: 100%; padding: 8px; border-radius: 4px; background: white; color: var(--text-color); border: 1px solid var(--border-color); font-size: 0.8rem;">
+                <option value="">-- Or select test image --</option>
+            </select>
+        </div>
+        <div class="control-panel">
+            <label>Keypoint Detector</label>
+            <select id="detectorSelect" style="width: 100%; padding: 8px; border-radius: 4px; background: white; color: var(--text-color); border: 1px solid var(--border-color); font-weight: 500;">
+                <option value="mser">MSER (Default)</option>
+                <option value="polygon_continuous">Polygon Continuous Math</option>
+                <option value="fast_mser">Fast MSER</option>
+                <option value="harris">Harris Corner</option>
+                <option value="harris_laplace">Scale-Invariant Harris (Harris-Laplace)</option>
+                <option value="dog">Difference of Gaussians</option>
+                <option value="moment_isotropy">Moment Isotropy</option>
+                <option value="large_blob">Large Blob</option>
+            </select>
+            <div style="margin-top: 10px;">
+                <label style="justify-content: flex-start; gap: 8px;"><input type="checkbox" id="useSpray"> Use Hash Spray (Rotation Inv.)</label>
+            </div>
+        </div>
+        
+        <div class="control-panel">
+            <label>Layers (Drag to reorder)</label>
+            <div id="layersList" class="layers-list"></div>
+        </div>
+        
+        <div class="control-panel">
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <div style="flex: 1;">
+                    <label>Canvas Width</label>
+                    <input type="number" id="canvasW" value="2000" oninput="updatePreview()" style="width: 100%; padding: 4px; background: white; color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px;">
+                </div>
+                <div style="flex: 1;">
+                    <label>Canvas Height</label>
+                    <input type="number" id="canvasH" value="2000" oninput="updatePreview()" style="width: 100%; padding: 4px; background: white; color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px;">
+                </div>
+            </div>
+            
+            <label>Output Interpolation</label>
+
+            <select id="interpolationSelect" style="width: 100%; padding: 4px; border-radius: 4px; background: white; color: var(--text-color); border: 1px solid var(--border-color); font-size: 0.8rem; margin-bottom: 8px;">
+                <option value="high">High Quality (Bicubic/Lanczos)</option>
+                <option value="medium">Medium Quality (Bilinear)</option>
+                <option value="low">Low Quality</option>
+                <option value="pixelated">Nearest Neighbor (Pixelated)</option>
+            </select>
+        </div>
+        
+        <div class="control-panel">
+            <div class="control-group">
+                <div class="control-header">
+                    <label style="display:inline">DB Max Dist</label>
+                    <span class="value-display" id="dbMaxDistVal">8</span>
+                </div>
+                <input type="range" id="dbMaxDist" min="0" max="64" value="8" oninput="document.getElementById('dbMaxDistVal').textContent=this.value">
+            </div>
+            
+            <button onclick="performSearch()" id="searchBtn">Search Database</button>
+
+            <div id="timing-panel" style="margin-top: 15px; background: rgba(0,0,0,0.02); padding: 12px; border-radius: 6px; font-size: 0.8rem; border: 1px solid var(--border-color); display: none;">
+                <div style="font-weight: 600; margin-bottom: 6px; color: var(--accent);">Execution Timings</div>
+                <div style="display: flex; flex-direction: column; gap: 4px; color: #64748b;">
+                    <div style="display: flex; justify-content: space-between;"><span>Load Index & Image:</span><span id="tLoad">-</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>MSER Detection:</span><span id="tDetect">-</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Descriptor Match:</span><span id="tMatch">-</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>RANSAC Inliers:</span><span id="tRansac">-</span></div>
+                    <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 4px; font-weight: 600; color: var(--text-color);"><span>Total Time:</span><span id="tTotal">-</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="search-status" style="margin-top: 10px; font-size: 0.9rem; color: #64748b;">
+            Upload an image and click Search.
+        </div>
+    </div>
+
+    <div id="workspace">
+        
+        <div id="toolbar">
+            <div id="tools-group" style="display:flex; gap:8px; margin-right: 20px;">
+                <button id="tool_move" class="tool-btn active" onclick="setTool('move')">Move</button>
+                <button id="tool_rotate" class="tool-btn" onclick="setTool('rotate')">Rotate</button>
+                <button id="tool_scale" class="tool-btn" onclick="setTool('scale')">Scale</button>
+                <button id="tool_skew" class="tool-btn" onclick="setTool('skew')">Skew</button>
+                <button id="tool_crop" class="tool-btn" onclick="setTool('crop')">Crop</button>
+            </div>
+            <div><button onclick="clearActiveLayerCrop()" style="padding: 6px 12px; font-size:0.8rem; background: #64748b;">Clear Crop</button></div>
+            <div><button onclick="deleteActiveLayer()" style="padding: 6px 12px; font-size:0.8rem; background: #ef4444;">Del Layer</button></div>
+            <div style="flex-grow: 1;"></div>
+            <div><input type="checkbox" id="showLines" checked onchange="drawMatches()"><label style="margin-left: 4px;">Show Connections</label></div>
+            <div><input type="checkbox" id="showBoxes" checked onchange="drawMatches()"><label style="margin-left: 4px;">Show Keypoints</label></div>
+            <div><label style="margin-right: 4px;">Max Dist:</label><input type="range" id="distFilter" min="0" max="64" value="8" oninput="drawMatches()"><span id="distVal" style="margin-left: 4px;">8</span></div>
+        </div>
+
+        <div id="canvas-container">
+            <div class="image-wrapper" id="queryWrapper">
+                <div class="image-title">Query Image</div>
+                <canvas id="previewCanvas" width="400" height="400"></canvas>
+            </div>
+            <div class="image-wrapper" id="baseWrapper" style="display: none;">
+                <div class="image-title" id="bTitle">Matched Database Image</div>
+                <img id="baseImg" src="" alt="Base" crossorigin="anonymous">
+            </div>
+            <canvas id="matchCanvas"></canvas>
+        </div>
+        <div id="details-panel">
+            <div id="panel-content" style="color: #64748b; font-style: italic;">Hover over a match line to see details.</div>
+        </div>
+        </div>
+    </div>
+
+    <div id="right-sidebar">
+        <h2>Other Matches</h2>
+        <div id="other-matches-list" style="flex-grow: 1; overflow-y: auto;">
+            <div style="color: #64748b; font-size: 0.9rem; text-align: center; margin-top: 20px;">Matches will appear here.</div>
+        </div>
+    </div>
+
+    <canvas id="hiddenCanvas"></canvas>
+
+    <script>
+        let allResults = [];
+        let selectedResultIdx = -1;
+        let baseImageObj = new Image();
+        let currentMatches = [];
+        let hoveredMatch = -1;
+        let isSearching = false;
+        
+        const previewCanvas = document.getElementById('previewCanvas');
+        const pCtx = previewCanvas.getContext('2d');
+        const hiddenCanvas = document.getElementById('hiddenCanvas');
+        const hCtx = hiddenCanvas.getContext('2d');
+        
+        const matchCanvas = document.getElementById('matchCanvas');
+        const mCtx = matchCanvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+        
+        const baseImg = document.getElementById('baseImg');
+        const bWrapper = document.getElementById('baseWrapper');
+
+        
+        let layers = [];
+        let activeLayer = null;
+        let currentTool = 'move';
+        
+        class Layer {
+            constructor(img, name) {
+                this.id = Date.now() + Math.random();
+                this.name = name;
+                this.img = img;
+                this.tx = 0;
+                this.ty = 0;
+                this.scale = 1.0;
+                this.rotate = 0;
+                this.skewX = 0;
+                this.skewY = 0;
+                this.cropPolygon = null;
+                this.tempPolygon = [];
+                
+                
+            }
+        }
+
+        function setTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tool_' + tool).classList.add('active');
+        }
+
+        function clearActiveLayerCrop() {
+            if (activeLayer) {
+                activeLayer.cropPolygon = null;
+                activeLayer.tempPolygon = [];
+                updatePreview();
+            }
+        }
+        
+        function deleteActiveLayer() {
+            if (activeLayer) {
+                layers = layers.filter(l => l !== activeLayer);
+                activeLayer = layers.length > 0 ? layers[0] : null;
+                updateLayersUI();
+                updatePreview();
+            }
+        }
+
+
+
+        // Resize overlay canvas
+        function resizeOverlay() {
+            matchCanvas.width = container.clientWidth;
+            matchCanvas.height = container.clientHeight;
+            drawMatches();
+        }
+        window.addEventListener('resize', resizeOverlay);
+
+        const dropZone = document.getElementById('dropZone');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.style.borderColor = 'var(--accent)', false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.style.borderColor = 'var(--border-color)', false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length) handleFile(files[0]);
+        }, false);
+
+        document.getElementById('fileUpload').addEventListener('change', function(e) {
+            if (e.target.files.length) handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                originalImg = new Image();
+                originalImg.onload = updatePreview;
+                originalImg.src = event.target.result;
+                document.getElementById('testImageSelect').value = ""; // Reset dropdown
+            }
+            reader.readAsDataURL(file);
+        }
+
+        // Fetch test images on load
+        fetch('/api/images')
+            .then(res => res.json())
+            .then(images => {
+                const select = document.getElementById('testImageSelect');
+                images.forEach(img => {
+                    const opt = document.createElement('option');
+                    opt.value = img;
+                    opt.textContent = img;
+                    select.appendChild(opt);
+                });
+            })
+            .catch(err => console.error("Error fetching images:", err));
+
+        
+        document.getElementById('testImageSelect').addEventListener('change', function(e) {
+            if (!this.value) return;
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                const l = new Layer(img, this.value.split('/').pop());
+                layers.push(l);
+                activeLayer = l;
+                updateLayersUI();
+                updatePreview();
+            };
+            img.src = '/test_images/' + this.value;
+        });
+
+        function updateLayersUI() {
+            const list = document.getElementById('layersList');
+            list.innerHTML = '';
+            for (let i = layers.length - 1; i >= 0; i--) {
+                const layer = layers[i];
+                const div = document.createElement('div');
+                div.className = 'layer-item' + (layer === activeLayer ? ' active' : '');
+                
+                const img = document.createElement('img');
+                img.src = layer.img.src;
+                
+                const name = document.createElement('span');
+                name.style.flexGrow = "1";
+                name.style.fontSize = "0.8rem";
+                name.style.overflow = "hidden";
+                name.style.textOverflow = "ellipsis";
+                name.style.whiteSpace = "nowrap";
+                name.innerText = layer.name;
+                
+                div.appendChild(img);
+                div.appendChild(name);
+                
+                div.onclick = (e) => { activeLayer = layer; updateLayersUI(); };
+                
+                div.draggable = true;
+                div.ondragstart = (e) => { e.dataTransfer.setData('text/plain', i); };
+                div.ondragover = (e) => e.preventDefault();
+                div.ondrop = (e) => {
+                    e.preventDefault();
+                    const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+                    if (fromIdx !== i) {
+                        const [moved] = layers.splice(fromIdx, 1);
+                        layers.splice(i, 0, moved);
+                        updateLayersUI();
+                        updatePreview();
+                    }
+                };
+                list.appendChild(div);
+            }
+        }
+
+
+        
+        document.getElementById('interpolationSelect').addEventListener('change', updatePreview);
+
+        
+        
+        function getHiddenCanvasCoords(e) {
+            const rect = matchCanvas.getBoundingClientRect();
+            const qRect = getRenderedRect(previewCanvas, previewCanvas.width, previewCanvas.height);
+            if (qRect.width === 0) return null;
+            
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            
+            const cx = mx - (qRect.left - rect.left);
+            const cy = my - (qRect.top - rect.top);
+            
+            const prX = cx * (previewCanvas.width / qRect.width);
+            const prY = cy * (previewCanvas.height / qRect.height);
+            
+            const rx = parseFloat(previewCanvas.dataset.rx || 0);
+            const ry = parseFloat(previewCanvas.dataset.ry || 0);
+            const rw = parseFloat(previewCanvas.dataset.rw || previewCanvas.width);
+            const rh = parseFloat(previewCanvas.dataset.rh || previewCanvas.height);
+            
+            const hcX = (prX - rx) * (hiddenCanvas.width / rw);
+            const hcY = (prY - ry) * (hiddenCanvas.height / rh);
+            
+            return {x: hcX, y: hcY};
+        }
+
+        function getLayerTransformMatrix(layer) {
+            let mat = new DOMMatrix();
+            mat = mat.translate(hiddenCanvas.width/2 + layer.tx, hiddenCanvas.height/2 + layer.ty);
+            mat = mat.rotate(layer.rotate * 180 / Math.PI);
+            mat = mat.scale(layer.scale, layer.scale);
+            mat = mat.multiply(new DOMMatrix([1, layer.skewY, layer.skewX, 1, 0, 0]));
+            return mat;
+        }
+
+        function updatePreview() {
+            if (layers.length === 0) {
+                pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+                hCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+                currentMatches = [];
+                bWrapper.style.display = 'none';
+                drawMatches();
+                return;
+            }
+            
+            const canvasW = parseInt(document.getElementById('canvasW').value) || 2000;
+            const canvasH = parseInt(document.getElementById('canvasH').value) || 2000;
+            
+            hiddenCanvas.width = canvasW;
+            hiddenCanvas.height = canvasH;
+            
+            const interpolation = document.getElementById('interpolationSelect').value;
+            if (interpolation === 'pixelated') {
+                hCtx.imageSmoothingEnabled = false;
+            } else {
+                hCtx.imageSmoothingEnabled = true;
+                hCtx.imageSmoothingQuality = interpolation;
+            }
+            
+            hCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+            
+            layers.forEach(layer => {
+                hCtx.save();
+                hCtx.translate(canvasW/2 + layer.tx, canvasH/2 + layer.ty);
+                hCtx.rotate(layer.rotate);
+                hCtx.scale(layer.scale, layer.scale);
+                hCtx.transform(1, layer.skewY, layer.skewX, 1, 0, 0);
+                
+                if (layer.cropPolygon && layer.cropPolygon.length > 2) {
+                    hCtx.beginPath();
+                    hCtx.moveTo(layer.cropPolygon[0].x, layer.cropPolygon[0].y);
+                    for (let i=1; i<layer.cropPolygon.length; i++) {
+                        hCtx.lineTo(layer.cropPolygon[i].x, layer.cropPolygon[i].y);
+                    }
+                    hCtx.closePath();
+                    hCtx.clip();
+                }
+                
+                hCtx.translate(-layer.img.width/2, -layer.img.height/2);
+                hCtx.drawImage(layer.img, 0, 0);
+                hCtx.restore();
+            });
+
+            pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            const scaleFit = Math.min(previewCanvas.width / hiddenCanvas.width, previewCanvas.height / hiddenCanvas.height);
+            const rw = hiddenCanvas.width * scaleFit;
+            const rh = hiddenCanvas.height * scaleFit;
+            const rx = (previewCanvas.width - rw) / 2;
+            const ry = (previewCanvas.height - rh) / 2;
+            
+            pCtx.drawImage(hiddenCanvas, 0, 0, hiddenCanvas.width, hiddenCanvas.height, rx, ry, rw, rh);
+
+            previewCanvas.dataset.rx = rx;
+            previewCanvas.dataset.ry = ry;
+            previewCanvas.dataset.rw = rw;
+            previewCanvas.dataset.rh = rh;
+
+            currentMatches = [];
+            bWrapper.style.display = 'none';
+            drawMatches();
+        }
+
+        function getLayerAt(px, py) {
+            for (let i = layers.length - 1; i >= 0; i--) {
+                const layer = layers[i];
+                const mat = getLayerTransformMatrix(layer);
+                if (!mat) continue;
+                const invMat = mat.inverse();
+                const pt = new DOMPoint(px, py).matrixTransform(invMat);
+                
+                const w2 = layer.img.width / 2;
+                const h2 = layer.img.height / 2;
+                
+                if (pt.x >= -w2 && pt.x <= w2 && pt.y >= -h2 && pt.y <= h2) {
+                    return layer;
+                }
+            }
+            return null;
+        }
+
+        
+        function drawMatches() {
+            if (matchCanvas.width !== container.clientWidth || matchCanvas.height !== container.clientHeight) {
+                matchCanvas.width = container.clientWidth;
+                matchCanvas.height = container.clientHeight;
+            }
+            document.getElementById('distVal').innerText = document.getElementById('distFilter').value;
+            mCtx.clearRect(0, 0, matchCanvas.width, matchCanvas.height);
+            
+            const qRect = getRenderedRect(previewCanvas, previewCanvas.width, previewCanvas.height);
+            if (qRect.width === 0) return;
+            const cRect = matchCanvas.getBoundingClientRect();
+
+            const rx = parseFloat(previewCanvas.dataset.rx || 0);
+            const ry = parseFloat(previewCanvas.dataset.ry || 0);
+            const rw = parseFloat(previewCanvas.dataset.rw || previewCanvas.width);
+            const rh = parseFloat(previewCanvas.dataset.rh || previewCanvas.height);
+
+            const cScaleX = qRect.width / previewCanvas.width;
+            const cScaleY = qRect.height / previewCanvas.height;
+            const pOx = qRect.left - cRect.left;
+            const pOy = qRect.top - cRect.top;
+            
+            const hcOx = pOx + rx * cScaleX;
+            const hcOy = pOy + ry * cScaleY;
+            const hcScaleX = (rw / hiddenCanvas.width) * cScaleX;
+            const hcScaleY = (rh / hiddenCanvas.height) * cScaleY;
+
+            mCtx.save();
+            mCtx.beginPath();
+            mCtx.rect(hcOx, hcOy, hiddenCanvas.width * hcScaleX, hiddenCanvas.height * hcScaleY);
+            mCtx.clip();
+
+            layers.forEach(layer => {
+                const isHovered = (layer === activeLayer);
+                if (!isHovered && currentTool !== 'crop') return; 
+                
+                const mat = getLayerTransformMatrix(layer);
+                
+                mCtx.save();
+                mCtx.translate(hcOx, hcOy);
+                mCtx.scale(hcScaleX, hcScaleY);
+                mCtx.transform(mat.a, mat.b, mat.c, mat.d, mat.e, mat.f);
+                
+                const w2 = layer.img.width/2;
+                const h2 = layer.img.height/2;
+
+                if (isHovered) {
+                    mCtx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
+                    mCtx.lineWidth = 2 / hcScaleX;
+                    mCtx.strokeRect(-w2, -h2, layer.img.width, layer.img.height);
+                }
+                
+                if (layer.tempPolygon && layer.tempPolygon.length > 0) {
+                    mCtx.beginPath();
+                    mCtx.moveTo(layer.tempPolygon[0].x, layer.tempPolygon[0].y);
+                    for (let i=1; i<layer.tempPolygon.length; i++) mCtx.lineTo(layer.tempPolygon[i].x, layer.tempPolygon[i].y);
+                    mCtx.strokeStyle = '#3b82f6';
+                    mCtx.stroke();
+                } else if (layer.cropPolygon && layer.cropPolygon.length > 0) {
+                    mCtx.beginPath();
+                    mCtx.moveTo(layer.cropPolygon[0].x, layer.cropPolygon[0].y);
+                    for (let i=1; i<layer.cropPolygon.length; i++) mCtx.lineTo(layer.cropPolygon[i].x, layer.cropPolygon[i].y);
+                    mCtx.closePath();
+                    mCtx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
+                    mCtx.stroke();
+                }
+                
+                mCtx.restore();
+            });
+
+            if (activeLayer && activeLayer.tempPolygon && activeLayer.tempPolygon.length > 2) {
+                mCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                mCtx.fillRect(hcOx, hcOy, hiddenCanvas.width * hcScaleX, hiddenCanvas.height * hcScaleY);
+                
+                mCtx.globalCompositeOperation = 'destination-out';
+                const mat = getLayerTransformMatrix(activeLayer);
+                mCtx.beginPath();
+                for (let i = 0; i < activeLayer.tempPolygon.length; i++) {
+                    const pt = new DOMPoint(activeLayer.tempPolygon[i].x, activeLayer.tempPolygon[i].y).matrixTransform(mat);
+                    const mx = hcOx + pt.x * hcScaleX;
+                    const my = hcOy + pt.y * hcScaleY;
+                    if (i === 0) mCtx.moveTo(mx, my);
+                    else mCtx.lineTo(mx, my);
+                }
+                mCtx.closePath();
+                mCtx.fill();
+                mCtx.globalCompositeOperation = 'source-over';
+            }
+            
+            mCtx.restore();
+
+            if (currentMatches.length === 0 || bWrapper.style.display === 'none') return;
+            
+            const bRect = getRenderedRect(baseImg, baseImg.naturalWidth, baseImg.naturalHeight);
+            if (bRect.width === 0) return;
+            
+            const bOx = bRect.left - cRect.left;
+            const bOy = bRect.top - cRect.top;
+            const bScaleX = bRect.width / baseImg.naturalWidth;
+            const bScaleY = bRect.height / baseImg.naturalHeight;
+
+            const qOx = hcOx;
+            const qOy = hcOy;
+            const qScaleX = hcScaleX;
+            const qScaleY = hcScaleY;
+
+            const showLines = document.getElementById('showLines').checked;
+            const showBoxes = document.getElementById('showBoxes').checked;
+            const maxDist = parseInt(document.getElementById('distFilter').value);
+
+            if (showLines) {
+                currentMatches.forEach((m, idx) => {
+                    if (m.distance > maxDist) return;
+                    const isHovered = hoveredMatch === idx;
+                    const isFaded = hoveredMatch !== -1 && !isHovered;
+                    
+                    const qx = qOx + m.query_kp.x * qScaleX;
+                    const qy = qOy + m.query_kp.y * qScaleY;
+                    const bx = bOx + m.base_kp.x * bScaleX;
+                    const by = bOy + m.base_kp.y * bScaleY;
+                    
+                    const hue = m.is_valid ? 150 : 0;
+                    const alpha = isHovered ? 1.0 : (isFaded ? 0.1 : 0.6);
+                    
+                    mCtx.beginPath();
+                    mCtx.moveTo(qx, qy);
+                    mCtx.bezierCurveTo(qx + (bx - qx) / 3, qy, qx + 2 * (bx - qx) / 3, by, bx, by);
+                    mCtx.strokeStyle = `hsla(${hue}, 80%, 60%, ${alpha})`;
+                    mCtx.lineWidth = isHovered ? 3 : 1.5;
+                    mCtx.stroke();
+                });
+            }
+
+            if (showBoxes) {
+                currentMatches.forEach((m, idx) => {
+                    if (m.distance > maxDist) return;
+                    const isHovered = hoveredMatch === idx;
+                    const isFaded = hoveredMatch !== -1 && !isHovered;
+                    const hue = m.is_valid ? 150 : 0;
+                    const alpha = isHovered ? 1.0 : (isFaded ? 0.1 : 0.8);
+                    
+                    mCtx.strokeStyle = `hsla(${hue}, 80%, 60%, ${alpha})`;
+                    mCtx.fillStyle = `hsla(${hue}, 80%, 60%, ${alpha * 0.2})`;
+                    mCtx.lineWidth = isHovered ? 2 : 1;
+                    
+                    const qx = qOx + m.query_kp.x * qScaleX;
+                    const qy = qOy + m.query_kp.y * qScaleY;
+                    const qs = m.query_kp.scale * Math.min(qScaleX, qScaleY);
+                    
+                    mCtx.beginPath(); mCtx.arc(qx, qy, qs, 0, Math.PI*2); mCtx.fill(); mCtx.stroke();
+                    mCtx.beginPath(); mCtx.arc(qx, qy, 2, 0, Math.PI*2); mCtx.fill();
+
+                    const bx = bOx + m.base_kp.x * bScaleX;
+                    const by = bOy + m.base_kp.y * bScaleY;
+                    const bs = m.base_kp.scale * Math.min(bScaleX, bScaleY);
+                    
+                    mCtx.beginPath(); mCtx.arc(bx, by, bs, 0, Math.PI*2); mCtx.fill(); mCtx.stroke();
+                    mCtx.beginPath(); mCtx.arc(bx, by, 2, 0, Math.PI*2); mCtx.fill();
+                });
+            }
+        }
+
+        
+        let isDragging = false;
+        let isDrawingCrop = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let initialLayerState = null;
+
+        matchCanvas.addEventListener('mousedown', (e) => {
+            const hcPt = getHiddenCanvasCoords(e);
+            if (!hcPt) return;
+            const px = hcPt.x, py = hcPt.y;
+
+            const clickedLayer = getLayerAt(px, py);
+            
+            if (currentTool === 'crop') {
+                if (clickedLayer) {
+                    activeLayer = clickedLayer;
+                    updateLayersUI();
+                    isDrawingCrop = true;
+                    const invMat = getLayerTransformMatrix(activeLayer).inverse();
+                    const pt = new DOMPoint(px, py).matrixTransform(invMat);
+                    activeLayer.tempPolygon = [pt];
+                    drawMatches();
+                }
+                return;
+            }
+
+            if (clickedLayer) {
+                activeLayer = clickedLayer;
+                updateLayersUI();
+                isDragging = true;
+                dragStartX = px;
+                dragStartY = py;
+                initialLayerState = { tx: activeLayer.tx, ty: activeLayer.ty, rotate: activeLayer.rotate, scale: activeLayer.scale, skewX: activeLayer.skewX, skewY: activeLayer.skewY };
+            }
+        });
+
+        matchCanvas.addEventListener('mousemove', (e) => {
+            const hcPt = getHiddenCanvasCoords(e);
+            if (!hcPt) return;
+            const px = hcPt.x, py = hcPt.y;
+
+            if (isDrawingCrop && activeLayer) {
+                const invMat = getLayerTransformMatrix(activeLayer).inverse();
+                const pt = new DOMPoint(px, py).matrixTransform(invMat);
+                activeLayer.tempPolygon.push(pt);
+                drawMatches();
+                return;
+            }
+
+            if (isDragging && activeLayer) {
+                const dx = px - dragStartX;
+                const dy = py - dragStartY;
+
+                if (currentTool === 'move') {
+                    activeLayer.tx = initialLayerState.tx + dx;
+                    activeLayer.ty = initialLayerState.ty + dy;
+                } else if (currentTool === 'rotate') {
+                    activeLayer.rotate = initialLayerState.rotate + (dy * 0.01);
+                } else if (currentTool === 'scale') {
+                    const scaleFactor = 1 - (dy * 0.005);
+                    activeLayer.scale = Math.max(0.01, initialLayerState.scale * scaleFactor);
+                } else if (currentTool === 'skew') {
+                    activeLayer.skewX = initialLayerState.skewX + (dx * 0.005);
+                    activeLayer.skewY = initialLayerState.skewY + (dy * 0.005);
+                }
+                updatePreview();
+                return;
+            }
+
+            if (!isDragging && !isDrawingCrop && currentMatches.length > 0) {
+                const rect = matchCanvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                
+                const qRect = getRenderedRect(previewCanvas, previewCanvas.width, previewCanvas.height);
+                const bRect = getRenderedRect(baseImg, baseImg.naturalWidth, baseImg.naturalHeight);
+                const bOx = bRect.left - rect.left;
+                const bOy = bRect.top - rect.top;
+                const bScaleX = bRect.width / baseImg.naturalWidth;
+                const bScaleY = bRect.height / baseImg.naturalHeight;
+
+                const rx = parseFloat(previewCanvas.dataset.rx || 0);
+                const ry = parseFloat(previewCanvas.dataset.ry || 0);
+                const rw = parseFloat(previewCanvas.dataset.rw || previewCanvas.width);
+                const rh = parseFloat(previewCanvas.dataset.rh || previewCanvas.height);
+
+                const cScaleX = qRect.width / previewCanvas.width;
+                const cScaleY = qRect.height / previewCanvas.height;
+                const pOx = qRect.left - rect.left;
+                const pOy = qRect.top - rect.top;
+                
+                const hcOx = pOx + rx * cScaleX;
+                const hcOy = pOy + ry * cScaleY;
+                const hcScaleX = (rw / hiddenCanvas.width) * cScaleX;
+                const hcScaleY = (rh / hiddenCanvas.height) * cScaleY;
+
+                let hovered = -1;
+                for (let i = 0; i < currentMatches.length; i++) {
+                    const m = currentMatches[i];
+                    
+                    const qx = hcOx + m.query_kp.x * hcScaleX;
+                    const qy = hcOy + m.query_kp.y * hcScaleY;
+                    const qs = m.query_kp.scale * Math.min(hcScaleX, hcScaleY);
+                    
+                    const bx = bOx + m.base_kp.x * bScaleX;
+                    const by = bOy + m.base_kp.y * bScaleY;
+                    const bs = m.base_kp.scale * Math.min(bScaleX, bScaleY);
+                    
+                    const distQ = Math.sqrt((mx - qx)**2 + (my - qy)**2);
+                    const distB = Math.sqrt((mx - bx)**2 + (my - by)**2);
+                    
+                    if (distQ < Math.max(qs, 10)) { hovered = i; break; }
+                    if (distB < Math.max(bs, 10)) { hovered = i; break; }
+                }
+                if (hovered !== hoveredMatch) {
+                    hoveredMatch = hovered;
+                    drawMatches();
+                    
+                    const panel = document.getElementById('panel-content');
+                    if (hovered !== -1) {
+                        const m = currentMatches[hovered];
+                        panel.innerHTML = `<strong style="color:${m.is_valid ? 'var(--true-color)' : 'var(--false-color)'}">${m.is_valid ? 'Valid (Inlier)' : 'Invalid (Outlier)'}</strong> | Distance: <strong style="color: var(--false-color);">${m.distance} bits</strong><br>Q-Hash: ${m.query_kp.hash} (Scale: ${m.query_kp.scale.toFixed(1)})<br>B-Hash: ${m.base_kp.hash} (Scale: ${m.base_kp.scale.toFixed(1)})`;
+                    } else {
+                        panel.innerHTML = `<div style="color: #64748b; font-style: italic;">Hover over a match line to see details.</div>`;
+                    }
+                }
+            }
+        });
+
+        matchCanvas.addEventListener('mouseup', () => {
+
+            if (isDrawingCrop && activeLayer) {
+                if (activeLayer.tempPolygon.length > 2) {
+                    activeLayer.cropPolygon = [...activeLayer.tempPolygon];
+                }
+                activeLayer.tempPolygon = [];
+                isDrawingCrop = false;
+                updatePreview();
+            }
+            isDragging = false;
+        });
+        matchCanvas.addEventListener('mouseleave', () => {
+            if (isDrawingCrop && activeLayer) {
+                activeLayer.tempPolygon = [];
+                isDrawingCrop = false;
+                updatePreview();
+            }
+            isDragging = false;
+        });
+
+        async function performSearch() {
+            if (layers.length === 0 || isSearching) return;
+            
+            const btn = document.getElementById('searchBtn');
+            const status = document.getElementById('search-status');
+            const timingPanel = document.getElementById('timing-panel');
+            
+            isSearching = true;
+            btn.innerText = "Searching...";
+            status.innerHTML = "Extracting keypoints and matching against index...";
+            timingPanel.style.display = 'none';
+            
+            const detector = document.getElementById('detectorSelect').value;
+            const dbMaxDist = parseInt(document.getElementById('dbMaxDist').value);
+            const useSpray = document.getElementById('useSpray').checked;
+            const dataUrl = hiddenCanvas.toDataURL('image/png');
+            
+            try {
+                const res = await fetch('/api/reverse_search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: dataUrl, detector: detector, max_distance: dbMaxDist, use_spray: useSpray })
+                });
+                
+                const data = await res.json();
+                
+                if (data.error) {
+                    status.innerHTML = `<span style="color:red">Error: ${data.error}</span>`;
+                } else {
+                    if (data.timings) {
+                        document.getElementById('tLoad').innerText = data.timings.load_index_ms.toFixed(1) + ' ms';
+                        document.getElementById('tDetect').innerText = data.timings.detect_ms.toFixed(1) + ' ms';
+                        document.getElementById('tMatch').innerText = data.timings.match_ms.toFixed(1) + ' ms';
+                        document.getElementById('tRansac').innerText = data.timings.ransac_ms.toFixed(1) + ' ms';
+                        document.getElementById('tTotal').innerText = data.timings.total_ms.toFixed(1) + ' ms';
+                        timingPanel.style.display = 'block';
+                    }
+
+                    if (data.results && data.results.length > 0) {
+                        allResults = data.results;
+                        renderRightSidebar();
+                        selectResult(0);
+                    } else {
+                        status.innerHTML = `No matches found.`;
+                        bWrapper.style.display = 'none';
+                        currentMatches = [];
+                        allResults = [];
+                        renderRightSidebar();
+                    }
+                }
+            } catch (err) {
+                status.innerHTML = `<span style="color:red">Network Error: ${err.message}</span>`;
+            }
+            
+            isSearching = false;
+            btn.innerText = "Search Database";
+        }
+
+        function renderRightSidebar() {
+            const list = document.getElementById('other-matches-list');
+            list.innerHTML = '';
+            
+            if (allResults.length === 0) {
+                list.innerHTML = '<div style="color: #64748b; font-size: 0.9rem; text-align: center; margin-top: 20px;">No matches found.</div>';
+                return;
+            }
+
+            allResults.forEach((res, idx) => {
+                const div = document.createElement('div');
+                div.className = `match-item ${idx === selectedResultIdx ? 'selected' : ''}`;
+                div.onclick = () => selectResult(idx);
+                
+                const filename = res.base_image.split('/').pop();
+                div.innerHTML = `
+                    <img src="/${res.base_image}" alt="Match">
+                    <div style="flex-grow: 1; min-width: 0;">
+                        <div style="font-size: 0.8rem; font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; margin-bottom: 4px;">${filename}</div>
+                        <div style="font-size: 0.75rem; color: #64748b;">${res.votes_correct} inliers / ${res.votes_best} pts</div>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function selectResult(idx) {
+            if (idx < 0 || idx >= allResults.length) return;
+            selectedResultIdx = idx;
+            renderRightSidebar();
+            
+            const result = allResults[idx];
+            document.getElementById('search-status').innerHTML = `Found match in <b>${result.base_image.split('/').pop()}</b> with ${result.votes_correct} inliers.`;
+            
+            currentMatches = result.matches;
+            bWrapper.style.display = 'block';
+            document.getElementById('bTitle').innerText = result.base_image.split('/').pop();
+            
+            baseImg.onload = () => {
+                resizeOverlay();
+            };
+            baseImg.src = "/" + result.base_image + "?t=" + Date.now();
+        }
+
+        function getRenderedRect(element, naturalW, naturalH) {
+            const rect = element.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0 || naturalW === 0 || naturalH === 0) {
+                return rect;
+            }
+            
+            const imgRatio = naturalW / naturalH;
+            const boxRatio = rect.width / rect.height;
+            
+            let renderW = rect.width;
+            let renderH = rect.height;
+            let renderX = 0;
+            let renderY = 0;
+
+            if (imgRatio > boxRatio) {
+                renderH = rect.width / imgRatio;
+                renderY = (rect.height - renderH) / 2;
+            } else {
+                renderW = rect.height * imgRatio;
+                renderX = (rect.width - renderW) / 2;
+            }
+
+            return {
+                left: rect.left + renderX,
+                top: rect.top + renderY,
+                width: renderW,
+                height: renderH
+            };
+        }
+
+
+
+    </script>
+    <script>
+        
+        window.addEventListener('DOMContentLoaded', () => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                const l = new Layer(img, "Artist_playing_Shree_Krisha_in_a_dance_performance.jpg");
+                layers.push(l);
+                activeLayer = l;
+                updateLayersUI();
+                updatePreview();
+            };
+            img.src = "/test_images/Artist_playing_Shree_Krisha_in_a_dance_performance.jpg";
+
+        });
+    </script>
+</body>
+</html>
